@@ -1,0 +1,103 @@
+1 make
+[root@server2 ssh]# make clean
+rm -f tmp/*.o sshexec pass
+[root@server2 ssh]# make
+rm -f tmp/encoder.o
+gcc -g -c src/encoder.c -o tmp/encoder.o
+rm -f tmp/sshexec.o
+gcc -g -c src/sshexec.c -o tmp/sshexec.o -Iinclude
+rm -f tmp/pass.o
+gcc -g -c src/pass.c -o tmp/pass.o
+rm -f sshexec
+gcc -g -o sshexec tmp/sshexec.o tmp/encoder.o -Llib -lssh2
+rm -f pass
+gcc -g -o pass tmp/pass.o tmp/encoder.o
+
+
+2 set library path
+export LD_LIBRARY_PATH=`pwd`/lib:$LD_LIBRARY_PATH
+
+
+3 setup password.txt
+[root@server2 ssh]# cat password.txt 
+192.168.1.2 oracle   6 abc123    <<<<<<<<<<<<<<<<<<< 6 for length of password (abc123 is 6 char)
+127.0.0.1 root       8 qpzmwoxn
+[root@server2 ssh]# ./pass password.txt 
+open file password.txt
+input encrypt code(8 char):   <<<<<<<<< input encode code
+encoded 2 passwords
+[root@server2 ssh]# cat password.txt 
+192.168.1.2 oracle   6 qtr!$"   <<<<<<<<<<<<< password encrypted
+127.0.0.1 root       8 ...
+
+
+
+4 exec command on remote host
+[root@server2 ssh]# ./sshexec 127.0.0.1 root "ip add" password.txt 
+input encrypt code(8 char): 
+open file password.txt
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 16436 qdisc noqueue state UNKNOWN 
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 08:00:27:a3:b2:2d brd ff:ff:ff:ff:ff:ff
+    inet 192.168.1.2/24 brd 192.168.1.255 scope global eth0
+    inet6 fe80::a00:27ff:fea3:b22d/64 scope link 
+       valid_lft forever preferred_lft forever
+
+
+execute script
+[root@server2 ssh]# cat cmd.txt 
+. /home/oracle/.bash_profile
+sqlplus -S / as sysdba <<EOF
+set lin 999
+set pages 9999
+set feedback off
+set echo off
+select * from v\$log;
+exit;
+EOF
+
+[root@server2 ssh]# ./sshexec 192.168.1.2 oracle file=cmd.txt password.txt 
+input encrypt code(8 char): 
+open file password.txt
+.Last login: Mon May  9 17:37:48 2016 from server2.ls.com
+ /home/oracle/.bash_profile
+sqlplus -S / as sysdba <<EOF
+set lin 999
+set pages 9999
+set feedback off
+set echo off
+select * from v\$log;
+exit;
+EOF
+
+
+exit
+[oracle@server2 ~]$ . /home/oracle/.bash_profile
+[oracle@server2 ~]$ sqlplus -S / as sysdba <<EOF
+> set lin 999
+> set pages 9999
+> set feedback off
+> set echo off
+> select * from v\$log;
+> exit;
+> EOF
+
+    GROUP#    THREAD#  SEQUENCE#      BYTES  BLOCKSIZE	  MEMBERS ARC STATUS	       FIRST_CHANGE# FIRST_TIM NEXT_CHANGE# NEXT_TIME
+---------- ---------- ---------- ---------- ---------- ---------- --- ---------------- ------------- --------- ------------ ---------
+	 1	    1	     181   52428800	   512		1 YES INACTIVE		     1681225 04-MAY-16	    1697783 05-MAY-16
+	 2	    1	     182   52428800	   512		1 YES INACTIVE		     1697783 05-MAY-16	    1733114 09-MAY-16
+	 3	    1	     183   52428800	   512		1 NO  CURRENT		     1733114 09-MAY-16	 2.8147E+14
+[oracle@server2 ~]$ 
+[oracle@server2 ~]$ 
+[oracle@server2 ~]$ exit
+logout
+
+
+
+
+
+
