@@ -1,0 +1,17 @@
+rm -f tmp/sshexec.o
+gcc -g -c src/sshexec.c -o tmp/sshexec.o -Iinclude
+src/sshexec.c: In function 'main':
+src/sshexec.c:237: warning: passing argument 2 of 'decode_password' discards qualifiers from pointer target type
+src/sshexec.c:101: note: expected 'char *' but argument is of type 'const char *'
+src/sshexec.c:237: warning: passing argument 3 of 'decode_password' discards qualifiers from pointer target type
+src/sshexec.c:101: note: expected 'char *' but argument is of type 'const char *'
+src/sshexec.c:237: warning: passing argument 4 of 'decode_password' discards qualifiers from pointer target type
+src/sshexec.c:101: note: expected 'char *' but argument is of type 'const char *'
+rm -f tmp/pass.o
+gcc -g -c src/pass.c -o tmp/pass.o
+rm -f tmp/encoder.o
+gcc -g -c src/encoder.c -o tmp/encoder.o
+rm -f sshexec
+gcc -g -o sshexec tmp/sshexec.o tmp/encoder.o -Llib -lssh2
+rm -f pass
+gcc -g -o pass tmp/pass.o tmp/encoder.o
