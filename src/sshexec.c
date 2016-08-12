@@ -174,7 +174,7 @@ int decode_password(char* pass, char* fname, char* ip, char* uname)
         col[col_len] = '\0';
         long p_len = atol(col);
         
-        data += 2;
+        data += (col_len+1);
         memcpy(pass, data, p_len);
         pass[p_len] = '\0';
         decode(pass, p_len, code);
