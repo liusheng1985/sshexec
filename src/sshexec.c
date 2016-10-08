@@ -1,8 +1,10 @@
-# include <sys/socket.h>
-# include <netinet/in.h>
-# include <sys/select.h>
+// 2016-05-18  change to block-io 
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <sys/select.h>
 #include <unistd.h>
-# include <arpa/inet.h>
+#include <arpa/inet.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <stdlib.h>
@@ -18,34 +20,6 @@
 #include "encoder.h"
 
 #define SSH_PORT 22
-
-
-struct termios _saved_tio;  
-int tio_saved = 0;  
-
-static int _raw_mode(void)  
-{  
-    int rc;  
-    struct termios tio;  
-  
-    rc = tcgetattr(fileno(stdin), &tio);  
-    if (rc != -1) {  
-        _saved_tio = tio;  
-        tio_saved = 1;  
-        cfmakeraw(&tio);  
-        rc = tcsetattr(fileno(stdin), TCSADRAIN, &tio);  
-    }  
-  
-    return rc;  
-}  
-   
-static int _normal_mode(void)  
-{  
-    if (tio_saved)  
-        return tcsetattr(fileno(stdin), TCSADRAIN, &_saved_tio);  
-  
-    return 0;  
-} 
 
 
 ulong map_file(char* fname, char** buf)
@@ -72,7 +46,6 @@ ulong map_file(char* fname, char** buf)
         printf("mmap: %s\n", strerror(errno));
         exit(1);
     }
-    //printf("open file %s\n", fname);
     return map_size;
 }
 
@@ -211,12 +184,11 @@ static int waitsocket(int socket_fd, LIBSSH2_SESSION *session)
 int read_channel(LIBSSH2_SESSION *session, LIBSSH2_CHANNEL *channel, int sock)
 {
     char buffer[0x4000];
-    for(;;)
-    {
+//    for(;;)
+//    {
         int rc;
         do
         {
-            if(libssh2_channel_eof(channel) == 1) break;
             if((rc = libssh2_channel_read(channel, buffer, sizeof(buffer))) > 0)
             {
                 int i;
@@ -224,23 +196,26 @@ int read_channel(LIBSSH2_SESSION *session, LIBSSH2_CHANNEL *channel, int sock)
             }
         }
         while( rc > 0 );
-        if(rc == LIBSSH2_ERROR_EAGAIN) waitsocket(sock, session);
-        else break;
-    }
+//        if(libssh2_channel_eof(channel) == 1) break;
+//        if(rc == LIBSSH2_ERROR_EAGAIN) waitsocket(sock, session);
+//        else break;
+//    }
     printf("\n");
 }
 
 int exec_one_cmd(char* cmd, LIBSSH2_SESSION *session, LIBSSH2_CHANNEL **channel, int sock)
 {
     int rc;
-    while((*channel = libssh2_channel_open_session(session)) == NULL && libssh2_session_last_error(session,NULL,NULL,0) == LIBSSH2_ERROR_EAGAIN ) waitsocket(sock, session);
+    //while((*channel = libssh2_channel_open_session(session)) == NULL && libssh2_session_last_error(session,NULL,NULL,0) == LIBSSH2_ERROR_EAGAIN ) waitsocket(sock, session);
+    *channel = libssh2_channel_open_session(session);
     if( *channel == NULL )
     {
         fprintf(stderr,"Error\n");
         exit(1);
     }
     
-    while((rc = libssh2_channel_exec(*channel, cmd)) == LIBSSH2_ERROR_EAGAIN ) waitsocket(sock, session);
+//    while((rc = libssh2_channel_exec(*channel, cmd)) == LIBSSH2_ERROR_EAGAIN ) waitsocket(sock, session);
+    rc = libssh2_channel_exec(*channel, cmd);
     if(rc!=0)
     {
         fprintf(stderr,"Error\n");
@@ -248,7 +223,8 @@ int exec_one_cmd(char* cmd, LIBSSH2_SESSION *session, LIBSSH2_CHANNEL **channel,
     }
     
     read_channel(session, *channel, sock);
-    while((rc = libssh2_channel_close(*channel)) == LIBSSH2_ERROR_EAGAIN) waitsocket(sock, session);
+//    while((rc = libssh2_channel_close(*channel)) == LIBSSH2_ERROR_EAGAIN) waitsocket(sock, session);
+    rc = libssh2_channel_close(*channel);
     return rc;
 }
 
@@ -256,20 +232,23 @@ int exec_one_cmd(char* cmd, LIBSSH2_SESSION *session, LIBSSH2_CHANNEL **channel,
 int open_shell(LIBSSH2_SESSION *session, LIBSSH2_CHANNEL **channel, int sock)
 {
     int rc;
-    while((*channel = libssh2_channel_open_session(session)) == NULL && libssh2_session_last_error(session,NULL,NULL,0) == LIBSSH2_ERROR_EAGAIN ) waitsocket(sock, session);
+    //while((*channel = libssh2_channel_open_session(session)) == NULL && libssh2_session_last_error(session,NULL,NULL,0) == LIBSSH2_ERROR_EAGAIN ) waitsocket(sock, session);
+    *channel = libssh2_channel_open_session(session);
     if( *channel == NULL )
     {
         fprintf(stderr,"Error\n");
         exit(1);
     }
-    while((rc=libssh2_channel_request_pty(*channel, "vanilla")) == LIBSSH2_ERROR_EAGAIN ) waitsocket(sock, session);
+//    while((rc=libssh2_channel_request_pty(*channel, "vanilla")) == LIBSSH2_ERROR_EAGAIN ) waitsocket(sock, session);
+    rc=libssh2_channel_request_pty(*channel, "vanilla");
     if( rc != 0 )
     {
         fprintf(stderr,"get pty Error %d\n", rc);
         exit(1);
     }
     
-    while((rc=libssh2_channel_shell(*channel)) == LIBSSH2_ERROR_EAGAIN ) waitsocket(sock, session);
+//    while((rc=libssh2_channel_shell(*channel)) == LIBSSH2_ERROR_EAGAIN ) waitsocket(sock, session);
+    rc=libssh2_channel_shell(*channel);
     if( rc != 0 )
     {
         fprintf(stderr,"get shell Error %d\n", rc);
@@ -283,7 +262,8 @@ int write_channel(char* buf, LIBSSH2_SESSION *session, LIBSSH2_CHANNEL *channel,
     int i, rc;
     for(i=0; i<strlen(buf); i++)
     {
-        while((rc = libssh2_channel_write(channel, buf+i, 1)) == LIBSSH2_ERROR_EAGAIN ) waitsocket(sock, session);
+//        while((rc = libssh2_channel_write(channel, buf+i, 1)) == LIBSSH2_ERROR_EAGAIN ) waitsocket(sock, session);
+        rc = libssh2_channel_write(channel, buf+i, 1);
         if(rc<0)
         {
             fprintf(stderr,"write channel Error %d\n", rc);
@@ -320,7 +300,8 @@ int exec_shell_script(char* fname, LIBSSH2_SESSION *session, LIBSSH2_CHANNEL **c
     write_channel(buf, session, *channel, sock);
     read_channel(session, *channel, sock);
     fclose(cmdfile);
-    while((rc = libssh2_channel_close(*channel)) == LIBSSH2_ERROR_EAGAIN) waitsocket(sock, session);
+//    while((rc = libssh2_channel_close(*channel)) == LIBSSH2_ERROR_EAGAIN) waitsocket(sock, session);
+    rc = libssh2_channel_close(*channel);
     return rc;
 }
 
@@ -345,15 +326,18 @@ int logon(char* username, char* pass, LIBSSH2_SESSION **session, int sock)
     int rc;
     /* Create a session instance */
     if((*session = libssh2_session_init()) == NULL) return -1;
-    libssh2_session_set_blocking(*session, 0);
-    while ((rc = libssh2_session_handshake(*session, sock)) == LIBSSH2_ERROR_EAGAIN);
+    //libssh2_session_set_blocking(*session, 0);
+    libssh2_session_set_blocking(*session, 1);
+    //while ((rc = libssh2_session_handshake(*session, sock)) == LIBSSH2_ERROR_EAGAIN);
+    rc = libssh2_session_handshake(*session, sock);
     if(rc)
     {
         fprintf(stderr, "Failure establishing SSH session: %d %s\n", rc, strerror(errno));
         return -1;
     }
     
-    while ((rc = libssh2_userauth_password(*session, username, pass)) == LIBSSH2_ERROR_EAGAIN);
+//    while ((rc = libssh2_userauth_password(*session, username, pass)) == LIBSSH2_ERROR_EAGAIN);
+    rc = libssh2_userauth_password(*session, username, pass);
     if (rc) 
     {
         fprintf(stderr, "Authentication by password failed.\n");
@@ -392,16 +376,12 @@ void clear(LIBSSH2_SESSION *session, LIBSSH2_CHANNEL *channel, int sock)
         libssh2_channel_get_exit_signal(channel, &exitsignal, NULL, NULL, NULL, NULL, NULL);
     }
 
-  //  if (exitsignal) fprintf(stderr, "\nGot signal: %s\n", exitsignal);
-    //else fprintf(stderr, "\nEXIT: %d bytecount: %d\n", exitcode, bytecount);
-
     libssh2_channel_free(channel);
     channel = NULL;
 
     libssh2_session_disconnect(session, "");
     libssh2_session_free(session);
     close(sock);
-    //fprintf(stderr, "all done\n");
     libssh2_exit();
 }
 
@@ -432,10 +412,8 @@ int main(int argc, char *argv[])
     int sock = conn(ip_str, SSH_PORT);
     logon(username, pass, &session, sock);
 
-    _raw_mode();   
     if(str_start(commandline, "file=") == 1) exec_shell_script(commandline+5, session, &channel, sock);
     else rc = exec_one_cmd(commandline, session, &channel, sock);
-    _normal_mode();
     
     shutdown:
     clear(session, channel, sock);
